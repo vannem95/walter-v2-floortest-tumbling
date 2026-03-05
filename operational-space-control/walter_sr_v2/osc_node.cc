@@ -268,8 +268,9 @@ OSCNode::OSCNode(const std::string& xml_path)
     
     data_msg_.layout.dim.resize(4);
     
+
     // Add your metadata note here!
-    data_msg_.layout.dim[0].label = "hip_z_hl, hip_z_hr, hip_z_tl, hip_z_tr, hip_zv_hl, hip_zv_hr, hip_zv_tl, hip_zv_tr"; 
+    data_msg_.layout.dim[0].label = "target_hip_z, hip_z_tl, hip_z_tr, hip_z_hl, hip_z_hr, target_hip_z_vel, hip_zv_tl, hip_zv_tr, hip_zv_hl, hip_zv_hr"; 
     
     // Reserve memory so push_back is zero-overhead
     // data_msg_.data.reserve(num_sites * num_dof);        
