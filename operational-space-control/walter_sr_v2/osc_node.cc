@@ -76,10 +76,11 @@ namespace {
             Eigen::Vector3d p_wheel_A = p_knee + (rot_shin * v_wheel_A);
             Eigen::Vector3d p_wheel_B = p_knee + (rot_shin * v_wheel_B);
 
-            Eigen::Vector3d g_A = body_quat * p_wheel_A;
-            Eigen::Vector3d g_B = body_quat * p_wheel_B;
+            // Eigen::Vector3d g_A = body_quat * p_wheel_A;
+            // Eigen::Vector3d g_B = body_quat * p_wheel_B;
 
-            return std::max(-g_A.z(), -g_B.z()) + R_wheel;
+            // return std::max(-g_A.z(), -g_B.z()) + R_wheel;
+            return std::max(-p_wheel_A.z(), -p_wheel_B.z()) + R_wheel;            
         }    
 
 }
