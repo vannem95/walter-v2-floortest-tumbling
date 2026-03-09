@@ -542,8 +542,26 @@ void OSCNode::timer_callback() {
             local_state.motor_velocity(6), local_state.motor_velocity(7),
             0, 0, L_THIGH, L_SHIN);
 
-        double target_hip_z = hip_z_tl_initial;        
-        double target_hip_z_vel = 0.0;
+        // double target_hip_z = hip_z_tl_initial;        
+        // double target_hip_z_vel = 0.0;
+
+        // ===============================================================
+        // DYNAMIC SINE WAVE TARGET CALCULATION
+        // ===============================================================
+        // Define sine wave parameters
+        const double AMPLITUDE = 0.02;     // 2 cm amplitude 
+        const double FREQUENCY = 0.5;      // 0.5 Hz (1 full wave every 2 seconds)
+        const double BASE_HEIGHT = hip_z_tl_initial; // Anchor around the starting height
+        
+        // Calculate current angular frequency time 
+        double omega_t = 2.0 * M_PI * FREQUENCY * current_time;
+        
+        // Target Z position: y(t) = A * sin(wt) + C
+        double target_hip_z = (AMPLITUDE * std::sin(omega_t)) + BASE_HEIGHT;
+        
+        // Analytical derivative for velocity feed-forward: y'(t) = A * w * cos(wt)
+        double target_hip_z_vel = AMPLITUDE * (2.0 * M_PI * FREQUENCY) * std::cos(omega_t);
+        // ===============================================================        
         
 
 
@@ -631,52 +649,52 @@ void OSCNode::timer_callback() {
         // if (std::chrono::duration_cast<std::chrono::seconds>(now - last_print_time).count() >= 1) {
             // last_print_time = now;
 
-        std::stringstream ss;
-        ss << "\n--- OSC STATE DEBUG ---\n";
+        // std::stringstream ss;
+        // ss << "\n--- OSC STATE DEBUG ---\n";
         
-        // 1. Check if solver thinks feet are touching ground
-        ss << "Contact Mask: [ ";
-        for(int i=0; i<model::contact_site_ids_size; ++i) ss << local_state.contact_mask(i) << " ";
-        ss << "]\n";
+        // // 1. Check if solver thinks feet are touching ground
+        // ss << "Contact Mask: [ ";
+        // for(int i=0; i<model::contact_site_ids_size; ++i) ss << local_state.contact_mask(i) << " ";
+        // ss << "]\n";
 
-        // 2. Check estimated robot mass (from qM)
-        // Trace of upper-left 3x3 of Mass Matrix roughly correlates to mass
-        double approx_mass = osc_data_.mass_matrix(0,0); 
-        ss << "Mass Matrix (0,0): " << approx_mass << " (Should be ~total robot mass)\n";
+        // // 2. Check estimated robot mass (from qM)
+        // // Trace of upper-left 3x3 of Mass Matrix roughly correlates to mass
+        // double approx_mass = osc_data_.mass_matrix(0,0); 
+        // ss << "Mass Matrix (0,0): " << approx_mass << " (Should be ~total robot mass)\n";
 
-        // 3. Check qpos (Altitude)
-        ss << "Torso x (qpos[0]): " << mj_data_->qpos[0] << "\n";
-        ss << "Torso y (qpos[1]): " << mj_data_->qpos[1] << "\n";
-        ss << "Torso Height (qpos[2]): " << mj_data_->qpos[2] << "\n";
+        // // 3. Check qpos (Altitude)
+        // ss << "Torso x (qpos[0]): " << mj_data_->qpos[0] << "\n";
+        // ss << "Torso y (qpos[1]): " << mj_data_->qpos[1] << "\n";
+        // ss << "Torso Height (qpos[2]): " << mj_data_->qpos[2] << "\n";
 
-        // 4. Check Orientation
-        ss << "Torso Quat (w,x,y,z): " << mj_data_->qpos[3] << ", " << mj_data_->qpos[4] 
-        << ", " << mj_data_->qpos[5] << ", " << mj_data_->qpos[6] << "\n";
+        // // 4. Check Orientation
+        // ss << "Torso Quat (w,x,y,z): " << mj_data_->qpos[3] << ", " << mj_data_->qpos[4] 
+        // << ", " << mj_data_->qpos[5] << ", " << mj_data_->qpos[6] << "\n";
 
-        // 3. Joint Angles (Motors)
-        // These start at index 7 for a Floating Base robot
-        ss << "Motor Angles (Rad):  [ ";
-        for (int i = 0; i < model::nu_size; ++i) {
-            ss << mj_data_->qpos[7 + i] << " ";
-        }
-        ss << "]\n";
+        // // 3. Joint Angles (Motors)
+        // // These start at index 7 for a Floating Base robot
+        // ss << "Motor Angles (Rad):  [ ";
+        // for (int i = 0; i < model::nu_size; ++i) {
+        //     ss << mj_data_->qpos[7 + i] << " ";
+        // }
+        // ss << "]\n";
 
-        // 4. Joint Velocities (qvel) - Optional but useful
-        // Note: qvel is different. [0-2] Linear, [3-5] Angular, [6+] Joints
-        ss << "Motor Velocities:    [ ";
-        for (int i = 0; i < model::nu_size; ++i) {
-            ss << mj_data_->qvel[6 + i] << " ";
-        }
-        ss << "]\n";      
+        // // 4. Joint Velocities (qvel) - Optional but useful
+        // // Note: qvel is different. [0-2] Linear, [3-5] Angular, [6+] Joints
+        // ss << "Motor Velocities:    [ ";
+        // for (int i = 0; i < model::nu_size; ++i) {
+        //     ss << mj_data_->qvel[6 + i] << " ";
+        // }
+        // ss << "]\n";      
 
-        // 5. Check Gravity Vector (qfrc_bias)
-        // The first 3 elements of qfrc_bias should be approx [0, 0, mass*9.81]
-        ss << "Gravity/Bias Force (0-2): " 
-        << osc_data_.coriolis_matrix(0) << ", " 
-        << osc_data_.coriolis_matrix(1) << ", " 
-        << osc_data_.coriolis_matrix(2) << "\n";
+        // // 5. Check Gravity Vector (qfrc_bias)
+        // // The first 3 elements of qfrc_bias should be approx [0, 0, mass*9.81]
+        // ss << "Gravity/Bias Force (0-2): " 
+        // << osc_data_.coriolis_matrix(0) << ", " 
+        // << osc_data_.coriolis_matrix(1) << ", " 
+        // << osc_data_.coriolis_matrix(2) << "\n";
 
-        RCLCPP_INFO(this->get_logger(), "%s", ss.str().c_str());
+        // RCLCPP_INFO(this->get_logger(), "%s", ss.str().c_str());
         // }
         // -------------------------------------------
         
