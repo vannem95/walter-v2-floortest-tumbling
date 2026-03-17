@@ -95,17 +95,24 @@ class AutoGen():
     def inequality_constraints(
         self,
         q: MX,
+        max_contact_force: MX,  # <------------------------------------------------------ for soft switch
     ) -> MX:
         """Compute inequality constraints for the Operational Space Controller.
 
         Args:
             q: design vector.
+            max_contact_force: Vector of max normal forces for soft switching.
 
         Returns:
             MX: Inequality constraints.
 
             Friction Cone Constraints:
             |f_x| + |f_y| <= mu * f_z
+            
+            Soft Switch Constraint:
+            f_z <= max_contact_force
+
+
 
         """
         # Unpack Design Variables:
@@ -127,6 +134,15 @@ class AutoGen():
             contact_force = contact_forces[i]
             friction_constraints = translational_friction(contact_force)
             inequality_constraints.append(friction_constraints)
+
+                        
+            # Soft Switch (Normal Force Limit)
+            # contact_force[2] is f_z
+            # Constraint: f_z <= max_contact_force[i]
+            # Standard form (<= 0): f_z - max_contact_force[i] <= 0
+            normal_force_limit = contact_force[2] - max_contact_force[i]
+            inequality_constraints.append(normal_force_limit)
+
 
         inequality_constraints = casadi.vertcat(*inequality_constraints)
 
@@ -358,6 +374,8 @@ class AutoGen():
         desired_task_ddx = casadi.MX.sym("desired_task_ddx", self.num_site_ids, 6)
         J_task = casadi.MX.sym("J_task", self.num_site_ids * 6, self.dv_size)
         task_bias = casadi.MX.sym("task_bias", self.num_site_ids * 6)
+        max_contact_force = casadi.MX.sym("max_contact_force", self.num_contact_site_ids)# <------------ for soft switch
+
 
         equality_constraint_input = [
             design_vector,
@@ -368,6 +386,7 @@ class AutoGen():
 
         inequality_constraint_input = [
             design_vector,
+            max_contact_force, # <------------------------------------------------------ for soft switch
         ]
 
         objective_input = [

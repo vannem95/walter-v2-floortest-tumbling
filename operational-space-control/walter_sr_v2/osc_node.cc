@@ -16,8 +16,8 @@ namespace {
         .incref=f_incref, .checkout=f_checkout, .eval=f, .release=f_release, .decref=f_decref};
     using AeqParams = FunctionParams<Aeq_SZ_ARG, Aeq_SZ_RES, Aeq_SZ_IW, Aeq_SZ_W, optimization::Aeq_rows, optimization::Aeq_cols, optimization::Aeq_sz, 4>;
     using beqParams = FunctionParams<beq_SZ_ARG, beq_SZ_RES, beq_SZ_IW, beq_SZ_W, optimization::beq_sz, 1, optimization::beq_sz, 4>;
-    using AineqParams = FunctionParams<Aineq_SZ_ARG, Aineq_SZ_RES, Aineq_SZ_IW, Aineq_SZ_W, optimization::Aineq_rows, optimization::Aineq_cols, optimization::Aineq_sz, 1>;
-    using bineqParams = FunctionParams<bineq_SZ_ARG, bineq_SZ_RES, bineq_SZ_IW, bineq_SZ_W, optimization::bineq_sz, 1, optimization::bineq_sz, 1>;
+    using AineqParams = FunctionParams<Aineq_SZ_ARG, Aineq_SZ_RES, Aineq_SZ_IW, Aineq_SZ_W, optimization::Aineq_rows, optimization::Aineq_cols, optimization::Aineq_sz, 2>;
+    using bineqParams = FunctionParams<bineq_SZ_ARG, bineq_SZ_RES, bineq_SZ_IW, bineq_SZ_W, optimization::bineq_sz, 1, optimization::bineq_sz, 2>;
     using HParams = FunctionParams<H_SZ_ARG, H_SZ_RES, H_SZ_IW, H_SZ_W, optimization::H_rows, optimization::H_cols, optimization::H_sz, 4>;
     using fParams = FunctionParams<f_SZ_ARG, f_SZ_RES, f_SZ_IW, f_SZ_W, optimization::f_sz, 1, optimization::f_sz, 4>;
 
@@ -298,7 +298,10 @@ OSCNode::OSCNode(const std::string& xml_path)
     
 
     // Add your metadata note here!
-    data_msg_.layout.dim[0].label = "target_hip_z, hip_z_tl, hip_z_tr, hip_z_hl, hip_z_hr, target_hip_z_vel, hip_zv_tl, hip_zv_tr, hip_zv_hl, hip_zv_hr"; 
+    data_msg_.layout.dim[0].label = "target_hip_z, hip_z_tl, hip_z_tr, hip_z_hl, hip_z_hr, 
+    target_hip_z_vel, hip_zv_tl, hip_zv_tr, hip_zv_hl, hip_zv_hr, 
+    shin_pos_tl_target, shin_pos_tr_target, shin_pos_hl_target, shin_pos_hr_target, shin_pos_tl, shin_pos_tr, shin_pos_hl, shin_pos_hr, 
+    shin_vel_target, shin_vel_tl, shin_vel_tr, shin_vel_hl, shin_vel_hr"; 
     
     // Reserve memory so push_back is zero-overhead
     // data_msg_.data.reserve(num_sites * num_dof);        
@@ -386,37 +389,68 @@ void OSCNode::timer_callback() {
     time_wait_for_execution_ms_ = std::chrono::duration<double, std::milli>(t_start_execution - local_state_read_time).count();    
 
     double dt = current_time - last_time_;
+    if (dt == 0.0) dt = 0.0001; 
 
     // --- STATIC PERSISTENT VARIABLES ---
     // Declared OUTSIDE tick 0 so they survive forever and the whole function can see them!
-    static double hip_z_tl_initial = 0.192;
-    static double hip_z_tr_initial = 0.192;
-    static double hip_z_hl_initial = 0.192;
-    static double hip_z_hr_initial = 0.192;
+    static double hip_z_tl_initial = 0.14;
+    static double hip_z_tr_initial = 0.14;
+    static double hip_z_hl_initial = 0.14;
+    static double hip_z_hr_initial = 0.14;
+
+    static double shin_pos_tl_initial = 0.0;
+    static double shin_pos_tr_initial = 0.0;
+    static double shin_pos_hl_initial = 0.0;
+    static double shin_pos_hr_initial = 0.0;    
+
+    static double gait_start_time = 0.0;
+    static Eigen::Vector<double, model::contact_site_ids_size> contact_start_times = Eigen::Vector<double, model::contact_site_ids_size>::Constant(-100.0);
+    static Eigen::Vector<double, model::contact_site_ids_size> prev_contact_mask = Eigen::Vector<double, model::contact_site_ids_size>::Zero();
+    
+    const double soft_switch_max_force = 770.0; 
+    const double soft_switch_ramp_time = 0.5;    
+    
+
+    Eigen::Quaterniond q_body(local_state.body_rotation(0), local_state.body_rotation(1), 
+                            local_state.body_rotation(2), local_state.body_rotation(3));
+
+    // link lengths
+    const double L_THIGH = 0.1016;  // hip to knee
+    const double L_SHIN  = 0.08255; // knee to wheel center
+    const double R_WHEEL = 0.0635;  // Radius of the wheel
+
+    // Assign the values to the static variables (removed the 'double' keyword)
+    double hip_z_tl = get_propeller_leg_height(q_body, local_state.motor_position(0), local_state.motor_position(1), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
+    double hip_z_tr = get_propeller_leg_height(q_body, local_state.motor_position(2), local_state.motor_position(3), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
+    double hip_z_hl = get_propeller_leg_height(q_body, local_state.motor_position(4), local_state.motor_position(5), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
+    double hip_z_hr = get_propeller_leg_height(q_body, local_state.motor_position(6), local_state.motor_position(7), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
+
 
     // Check for first call or zero time step
     if (last_time_ == 0.0) {
         update_mj_data(local_state); // Pass local state
 
-        Eigen::Quaterniond q_body(local_state.body_rotation(0), local_state.body_rotation(1), 
-                                local_state.body_rotation(2), local_state.body_rotation(3));
+        hip_z_tl_initial = hip_z_tl;
+        hip_z_tr_initial = hip_z_tr;
+        hip_z_hl_initial = hip_z_hl;
+        hip_z_hr_initial = hip_z_hr;
 
-        // link lengths
-        const double L_THIGH = 0.1016;  // hip to knee
-        const double L_SHIN  = 0.08255; // knee to wheel center
-        const double R_WHEEL = 0.0635;  // Radius of the wheel
-    
-        // Assign the values to the static variables (removed the 'double' keyword)
-        hip_z_tl_initial = get_propeller_leg_height(q_body, local_state.motor_position(0), local_state.motor_position(1), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
-        hip_z_tr_initial = get_propeller_leg_height(q_body, local_state.motor_position(2), local_state.motor_position(3), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
-        hip_z_hl_initial = get_propeller_leg_height(q_body, local_state.motor_position(4), local_state.motor_position(5), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
-        hip_z_hr_initial = get_propeller_leg_height(q_body, local_state.motor_position(6), local_state.motor_position(7), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
+        // Set the gait start time immediately at t=0
+        gait_start_time = current_time;
+
+        shin_pos_tl_initial  =  local_state.motor_position(1);
+        shin_pos_tr_initial  =  local_state.motor_position(3);
+        shin_pos_hl_initial  =  local_state.motor_position(5);
+        shin_pos_hr_initial  =  local_state.motor_position(7);
+
         
         // To build the OSQP matrix template, we must provide physical data.
         update_osc_data();
-        update_optimization_data();
-        absl::Status result = set_up_optimization(local_state.contact_mask);
         
+        Eigen::Vector<double, model::contact_site_ids_size> initial_force_limits = Eigen::Vector<double, model::contact_site_ids_size>::Zero();
+        update_optimization_data(initial_force_limits);
+        
+        absl::Status result = set_up_optimization(initial_force_limits);        
         if (!result.ok()) {
             RCLCPP_FATAL(this->get_logger(), "Failed to initialize optimization: %s", result.message().data());
             std::lock_guard<std::mutex> lock_state(state_mutex_);
@@ -431,30 +465,81 @@ void OSCNode::timer_callback() {
 
     
 
+
+
+    // ===============================================================
+    // --- 1. TIMED CONTACT MASK OVERRIDE ---
+    // ===============================================================
+    // Unconditionally force the contact mask based purely on elapsed time
+    double flip_period = M_PI / (0.8 * 2.0); 
+    double elapsed_gait_time = current_time - gait_start_time;
+    
+    bool is_even_cycle = ((int)(elapsed_gait_time / flip_period) % 2 == 0);
+
+    if (is_even_cycle) {
+        // Fronts ON, Backs OFF
+        local_state.contact_mask(0) = 1.0; local_state.contact_mask(2) = 1.0; // Torso Front
+        local_state.contact_mask(1) = 0.0; local_state.contact_mask(3) = 0.0; // Torso Back
+        
+        local_state.contact_mask(4) = 1.0; local_state.contact_mask(6) = 1.0; // Head Front
+        local_state.contact_mask(5) = 0.0; local_state.contact_mask(7) = 0.0; // Head Back
+    } else {
+        // Backs ON, Fronts OFF
+        local_state.contact_mask(0) = 0.0; local_state.contact_mask(2) = 0.0;
+        local_state.contact_mask(1) = 1.0; local_state.contact_mask(3) = 1.0;
+        
+        local_state.contact_mask(4) = 0.0; local_state.contact_mask(6) = 0.0;
+        local_state.contact_mask(5) = 1.0; local_state.contact_mask(7) = 1.0;
+    }
+
+
+
+    // ===============================================================
+    // --- 2. CALCULATE SOFT SWITCH FORCE LIMITS ---
+    // ===============================================================
+    Eigen::Vector<double, model::contact_site_ids_size> current_force_limits;
+    for(int i=0; i < model::contact_site_ids_size; ++i) {
+        bool is_contact = (local_state.contact_mask(i) > 0.5);
+        bool was_contact = (prev_contact_mask[i] > 0.5);
+
+        if (is_contact && !was_contact) contact_start_times[i] = current_time;
+
+        double limit = 0.0;
+        if (is_contact) {
+            double duration = current_time - contact_start_times[i];
+            double ratio = std::clamp(duration / soft_switch_ramp_time, 0.0, 1.0);
+            limit = ratio * soft_switch_max_force;
+        }
+        current_force_limits[i] = limit;
+    }
+    prev_contact_mask = local_state.contact_mask;
+
+
     // --- 2. Mandatory Joint Limit Check (Outer Loop - UNLOCKED) ---
     // If local_safety_override_active is true, limit_hit remains true, and the check loop is skipped.
     bool limit_hit = local_safety_override_active; 
     
     if (!local_safety_override_active) {
         
-        const double SHIN_LIMIT = M_PI / 4.0;
-        const double THIGH_LIMIT = 0.95;
+        const double HIP_MIN_RAD = 0.6;
+        const double HIP_MAX_RAD = 1.8;
+        const double MIN_HIP_HEIGHT = 0.125; // 0.13 meters
         
-        // Check Thighs (0, 2, 4, 6) using local_state.motor_position
-        for (size_t i : {0, 2, 4, 6}) {
-            if (std::abs(local_state.motor_position(i)) >= THIGH_LIMIT) {
-                limit_hit = true;
-                RCLCPP_WARN_ONCE(this->get_logger(), "Absolute THIGH limit (%.2f rad) hit on motor index %zu. Overriding control.", THIGH_LIMIT, i);
-                break; 
-            }
+        // 1. Check Hip Heights
+        if (hip_z_tl < MIN_HIP_HEIGHT || hip_z_tr < MIN_HIP_HEIGHT || 
+            hip_z_hl < MIN_HIP_HEIGHT || hip_z_hr < MIN_HIP_HEIGHT) {
+            limit_hit = true;
+            RCLCPP_WARN_ONCE(this->get_logger(), "Hip height limit (< %.2fm) hit. Overriding control.", MIN_HIP_HEIGHT);
         }
         
-        // Check Shins (1, 3, 5, 7)
+        // 2. Check Hip (Thigh) Joints (0, 2, 4, 6) using local_state.motor_position
         if (!limit_hit) {
-            for (size_t i : {1, 3, 5, 7}) {
-                if (std::abs(local_state.motor_position(i)) >= SHIN_LIMIT) {
+            for (size_t i : {0, 2, 4, 6}) {
+                double pos = local_state.motor_position(i);
+                double abs_pos = std::abs(pos); // Assuming left/right mirroring
+                if (abs_pos < HIP_MIN_RAD || abs_pos > HIP_MAX_RAD) {
                     limit_hit = true;
-                    RCLCPP_WARN_ONCE(this->get_logger(), "Absolute SHIN limit (%.2f rad) hit on motor index %zu. Overriding control.", SHIN_LIMIT, i);
+                    RCLCPP_WARN_ONCE(this->get_logger(), "Hip limit (%.2f-%.2f rad) hit on motor index %zu (val: %.2f). Overriding control.", HIP_MIN_RAD, HIP_MAX_RAD, i, pos);
                     break; 
                 }
             }
@@ -507,19 +592,19 @@ void OSCNode::timer_callback() {
         
         
         // --- PROPELLER HEIGHT CALCULATION ---
-        Eigen::Quaterniond q_body(local_state.body_rotation(0), local_state.body_rotation(1), 
-                                local_state.body_rotation(2), local_state.body_rotation(3));
+        // Eigen::Quaterniond q_body(local_state.body_rotation(0), local_state.body_rotation(1), 
+        //                         local_state.body_rotation(2), local_state.body_rotation(3));
         
-        // link lengths
-        const double L_THIGH = 0.1016;  // hip to knee
-        const double L_SHIN  = 0.08255; // knee to wheel center
-        const double R_WHEEL = 0.0635;  // Radius of the wheel
+        // // link lengths
+        // const double L_THIGH = 0.1016;  // hip to knee
+        // const double L_SHIN  = 0.08255; // knee to wheel center
+        // const double R_WHEEL = 0.0635;  // Radius of the wheel
 
-        // Calculate for each leg
-        double hip_z_tl = get_propeller_leg_height(q_body, local_state.motor_position(0), local_state.motor_position(1), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
-        double hip_z_tr = get_propeller_leg_height(q_body, local_state.motor_position(2), local_state.motor_position(3), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
-        double hip_z_hl = get_propeller_leg_height(q_body, local_state.motor_position(4), local_state.motor_position(5), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
-        double hip_z_hr = get_propeller_leg_height(q_body, local_state.motor_position(6), local_state.motor_position(7), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
+        // // Calculate for each leg
+        // double hip_z_tl = get_propeller_leg_height(q_body, local_state.motor_position(0), local_state.motor_position(1), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
+        // double hip_z_tr = get_propeller_leg_height(q_body, local_state.motor_position(2), local_state.motor_position(3), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
+        // double hip_z_hl = get_propeller_leg_height(q_body, local_state.motor_position(4), local_state.motor_position(5), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
+        // double hip_z_hr = get_propeller_leg_height(q_body, local_state.motor_position(6), local_state.motor_position(7), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
 
         // Use instantaneous motor velocities to calculate exact Z velocity
         double hip_zv_tl = get_propeller_leg_height_velocity(
@@ -546,47 +631,47 @@ void OSCNode::timer_callback() {
         // double target_hip_z_vel = 0.0;
 
         // ===============================================================
-        // DYNAMIC SINE WAVE TARGET CALCULATION
+        // HIP HEIGHT TARGET
         // ===============================================================
-        // Define sine wave parameters
-        const double AMPLITUDE = 0.005;     // 2 cm amplitude 
-        const double FREQUENCY = 0.5;      // 0.5 Hz (1 full wave every 2 seconds)
         const double BASE_HEIGHT = hip_z_tl_initial; // Anchor around the starting height
-
-        // Track elapsed time safely to prevent ROS clock jumps
-        static double start_time = current_time;
-        double elapsed_t = current_time - start_time;
-
-        // Ramp up the amplitude over the first 2 seconds to avoid startup shock
-        double ramp = std::clamp(elapsed_t / 4.0, 0.0, 1.0);
-        double active_amplitude = AMPLITUDE * ramp;
-
-        // Calculate current angular frequency time 
-        double omega = 2.0 * M_PI * FREQUENCY;
-        double omega_t = omega * elapsed_t;
-        
-        // Target Z position: y(t) = A * sin(wt) + C
-        // double target_hip_z = (AMPLITUDE * std::sin(omega_t)) + BASE_HEIGHT;
-        // double target_hip_z_vel = AMPLITUDE * (2.0 * M_PI * FREQUENCY) * std::cos(omega_t);
-
-        double target_hip_z = (active_amplitude * std::sin(omega_t)) + BASE_HEIGHT;
-        double target_hip_z_vel = active_amplitude * omega * std::cos(omega_t);
-        
+        double target_hip_z = BASE_HEIGHT;
+        double target_hip_z_vel = 0.0;
         // ===============================================================        
+
+
+        // ===============================================================
+        // SHIN VELOCITY AND POSITION TARGET
+        // ===============================================================        
+        double elapsed_t = current_time - gait_start_time;
         
+        double shin_vel_target = 0.5;
+
+        double shin_pos_tl_target = shin_pos_tl_initial + shin_vel_target*elapsed_t;
+        double shin_pos_tr_target = shin_pos_tr_initial + shin_vel_target*elapsed_t;
+        double shin_pos_hl_target = shin_pos_hl_initial + shin_vel_target*elapsed_t;
+        double shin_pos_hr_target = shin_pos_hr_initial + shin_vel_target*elapsed_t;
+
+        double shin_pos_tl  =  local_state.motor_position(1);
+        double shin_pos_tr  =  local_state.motor_position(3);
+        double shin_pos_hl  =  local_state.motor_position(5);
+        double shin_pos_hr  =  local_state.motor_position(7);
+
+        double shin_vel_tl  =  local_state.motor_velocity(1);
+        double shin_vel_tr  =  local_state.motor_velocity(3);
+        double shin_vel_hl  =  local_state.motor_velocity(5);
+        double shin_vel_hr  =  local_state.motor_velocity(7);
+
+        double shin_kp = 400.0; 
+        double shin_kv = 20.0;
+        // ===============================================================        
+
 
 
         // Shin DDQ Commands (using local_state)
-        // double tl_ddq_cmd  = shin_kp * (0.0 + shin_pos_target - local_state.motor_position(1)) + shin_kv * (rot_vel_target - local_state.motor_velocity(1));
-        // double tr_ddq_cmd  = shin_kp * (0.0 + shin_pos_target - local_state.motor_position(3)) + shin_kv * (rot_vel_target - local_state.motor_velocity(3));
-        // double hl_ddq_cmd  = shin_kp * (0.0 - shin_pos_target - local_state.motor_position(5)) + shin_kv * (rot_vel_target - local_state.motor_velocity(5));
-        // double hr_ddq_cmd  = shin_kp * (0.0 - shin_pos_target - local_state.motor_position(7)) + shin_kv * (rot_vel_target - local_state.motor_velocity(7));
-
-        // Thigh DDQ Commands (using local_state)
-        // double tlh_ddq_cmd = thigh_kp * (0.0 + thigh_pos_target - local_state.motor_position(0)) + thigh_kv * (rot_vel_target - local_state.motor_velocity(0));
-        // double trh_ddq_cmd = thigh_kp * (0.0 + thigh_pos_target - local_state.motor_position(2)) + thigh_kv * (rot_vel_target - local_state.motor_velocity(2));
-        // double hlh_ddq_cmd = thigh_kp * (0.0 - thigh_pos_target - local_state.motor_position(4)) + thigh_kv * (rot_vel_target - local_state.motor_velocity(4));
-        // double hrh_ddq_cmd = thigh_kp * (0.0 - thigh_pos_target - local_state.motor_position(6)) + thigh_kv * (rot_vel_target - local_state.motor_velocity(6));
+        double tl_ddq_cmd  = shin_kp * (shin_pos_tl_target - shin_pos_tl) + shin_kv * (shin_vel_target - shin_vel_tl);
+        double tr_ddq_cmd  = shin_kp * (shin_pos_tr_target - shin_pos_tr) + shin_kv * (shin_vel_target - shin_vel_tr);
+        double hl_ddq_cmd  = shin_kp * (shin_pos_hl_target - shin_pos_hl) + shin_kv * (shin_vel_target - shin_vel_hl);
+        double hr_ddq_cmd  = shin_kp * (shin_pos_hr_target - shin_pos_hr) + shin_kv * (shin_vel_target - shin_vel_hr);
 
         // Thigh DDQ Commands (using local_state) -- Hip height
         double tl_hip_z_ddq_cmd = thigh_z_kp * (target_hip_z - hip_z_tl) + thigh_z_kv * (target_hip_z_vel - hip_zv_tl);
@@ -596,10 +681,8 @@ void OSCNode::timer_callback() {
 
         // Populate Taskspace Targets Matrix 
         taskspace_targets_.setZero(); 
-        // taskspace_targets_.row(1)(4) = tl_ddq_cmd; taskspace_targets_.row(2)(4) = tr_ddq_cmd;
-        // taskspace_targets_.row(3)(4) = hl_ddq_cmd; taskspace_targets_.row(4)(4) = hr_ddq_cmd;
-        // taskspace_targets_.row(5)(4) = tlh_ddq_cmd; taskspace_targets_.row(6)(4) = trh_ddq_cmd;
-        // taskspace_targets_.row(7)(4) = hlh_ddq_cmd; taskspace_targets_.row(8)(4) = hrh_ddq_cmd;
+        taskspace_targets_.row(1)(4) = tl_ddq_cmd; taskspace_targets_.row(2)(4) = tr_ddq_cmd;
+        taskspace_targets_.row(3)(4) = hl_ddq_cmd; taskspace_targets_.row(4)(4) = hr_ddq_cmd;
         taskspace_targets_.row(5)(2) = tl_hip_z_ddq_cmd; taskspace_targets_.row(6)(2) = tr_hip_z_ddq_cmd;
         taskspace_targets_.row(7)(2) = hl_hip_z_ddq_cmd; taskspace_targets_.row(8)(2) = hr_hip_z_ddq_cmd;
 
@@ -632,6 +715,28 @@ void OSCNode::timer_callback() {
         data_msg_.data.push_back(hip_zv_tr);
         data_msg_.data.push_back(hip_zv_hl);
         data_msg_.data.push_back(hip_zv_hr);
+
+
+        data_msg_.data.push_back(shin_pos_tl_target);
+        data_msg_.data.push_back(shin_pos_tr_target);
+        data_msg_.data.push_back(shin_pos_hl_target);
+        data_msg_.data.push_back(shin_pos_hr_target);
+
+        data_msg_.data.push_back(shin_pos_tl);
+        data_msg_.data.push_back(shin_pos_tr);
+        data_msg_.data.push_back(shin_pos_hl);
+        data_msg_.data.push_back(shin_pos_hr);
+
+        data_msg_.data.push_back(shin_vel_target);
+
+        data_msg_.data.push_back(shin_vel_tl);
+        data_msg_.data.push_back(shin_vel_tr);
+        data_msg_.data.push_back(shin_vel_hl);
+        data_msg_.data.push_back(shin_vel_hr);
+
+
+
+
         
         // 3. Publish
         data_pub_->publish(data_msg_);
@@ -645,8 +750,8 @@ void OSCNode::timer_callback() {
         // --- TIMING POINT B: END MUJOCO/KINEMATICS, START CASADI/OSQP DATA ---        
         auto t_start_casadi = std::chrono::high_resolution_clock::now();        
         
-        update_optimization_data();
-        std::ignore = update_optimization(local_state.contact_mask); 
+        update_optimization_data(current_force_limits);
+        std::ignore = update_optimization(current_force_limits); 
 
         // --- TIMING POINT C: END CASADI/OSQP DATA, START SOLVE ---
         auto t_start_solve = std::chrono::high_resolution_clock::now();
@@ -924,7 +1029,7 @@ void OSCNode::update_osc_data() {
 }
 
 // ===============================================================================================================
-void OSCNode::update_optimization_data() {
+void OSCNode::update_optimization_data(const Eigen::Vector<double, model::contact_site_ids_size>& force_limits) {
     auto mass_matrix = matrix_utils::transformMatrix<double, model::nv_size, model::nv_size, matrix_utils::ColumnMajor>(osc_data_.mass_matrix.data());
     auto coriolis_matrix = matrix_utils::transformMatrix<double, model::nv_size, 1, matrix_utils::ColumnMajor>(osc_data_.coriolis_matrix.data());
     auto contact_jacobian = matrix_utils::transformMatrix<double, model::nv_size, optimization::z_size, matrix_utils::ColumnMajor>(osc_data_.contact_jacobian.data());
@@ -934,8 +1039,9 @@ void OSCNode::update_optimization_data() {
     
     auto Aeq_matrix = evaluate_function<AeqParams>(Aeq_ops, {design_vector_.data(), mass_matrix.data(), coriolis_matrix.data(), contact_jacobian.data()});
     auto beq_matrix = evaluate_function<beqParams>(beq_ops, {design_vector_.data(), mass_matrix.data(), coriolis_matrix.data(), contact_jacobian.data()});
-    auto Aineq_matrix = evaluate_function<AineqParams>(Aineq_ops, {design_vector_.data()});
-    auto bineq_matrix = evaluate_function<bineqParams>(bineq_ops, {design_vector_.data()});
+    // Updates to integrate the required Casadi Inputs mapping into C++ arrays
+    auto Aineq_matrix = evaluate_function<AineqParams>(Aineq_ops, {design_vector_.data(), force_limits.data()});
+    auto bineq_matrix = evaluate_function<bineqParams>(bineq_ops, {design_vector_.data(), force_limits.data()});
     auto H_matrix = evaluate_function<HParams>(H_ops, {design_vector_.data(), desired_taskspace_ddx.data(), taskspace_jacobian.data(), taskspace_bias.data()});
     auto f_matrix = evaluate_function<fParams>(f_ops, {design_vector_.data(), desired_taskspace_ddx.data(), taskspace_jacobian.data(), taskspace_bias.data()});
 
@@ -948,7 +1054,7 @@ void OSCNode::update_optimization_data() {
 }
 
 // ===============================================================================================================
-absl::Status OSCNode::set_up_optimization(const Vector<model::contact_site_ids_size>& contact_mask) {
+absl::Status OSCNode::set_up_optimization(const Vector<model::contact_site_ids_size>& force_limits) {
     MatrixColMajor<optimization::constraint_matrix_rows, optimization::constraint_matrix_cols> A;
     A << opt_data_.Aeq, opt_data_.Aineq, Abox_;
     Vector<optimization::bounds_size> lb;
@@ -957,8 +1063,12 @@ absl::Status OSCNode::set_up_optimization(const Vector<model::contact_site_ids_s
     Vector<optimization::z_size> z_ub_masked = z_ub_;
     
     for(int i = 0; i < model::contact_site_ids_size; i++) {
-        z_lb_masked(Eigen::seqN(3 * i, 3)) *= contact_mask(i);
-        z_ub_masked(Eigen::seqN(3 * i, 3)) *= contact_mask(i);
+        if (force_limits(i) <= 0.001) {
+            z_lb_masked(Eigen::seqN(3 * i, 3)).setZero();
+            z_ub_masked(Eigen::seqN(3 * i, 3)).setZero();
+        } else {
+            z_ub_masked(3 * i + 2) = force_limits(i);
+        }
     }
 
     lb << opt_data_.beq, bineq_lb_, dv_lb_, u_lb_, z_lb_masked;
@@ -980,7 +1090,8 @@ absl::Status OSCNode::set_up_optimization(const Vector<model::contact_site_ids_s
 }
 
 // ===============================================================================================================
-absl::Status OSCNode::update_optimization(const Vector<model::contact_site_ids_size>& contact_mask) {
+
+absl::Status OSCNode::update_optimization(const Vector<model::contact_site_ids_size>& force_limits) {
     MatrixColMajor<optimization::constraint_matrix_rows, optimization::constraint_matrix_cols> A;
     A << opt_data_.Aeq, opt_data_.Aineq, Abox_;
     Vector<optimization::bounds_size> lb;
@@ -989,8 +1100,13 @@ absl::Status OSCNode::update_optimization(const Vector<model::contact_site_ids_s
     Vector<optimization::z_size> z_ub_masked = z_ub_;
 
     for(int i = 0; i < model::contact_site_ids_size; i++) {
-        z_lb_masked(Eigen::seqN(3 * i, 3)) *= contact_mask(i);
-        z_ub_masked(Eigen::seqN(3 * i, 3)) *= contact_mask(i);
+        if (force_limits(i) <= 0.001) {
+            z_lb_masked(Eigen::seqN(3 * i, 3)).setZero();
+            z_ub_masked(Eigen::seqN(3 * i, 3)).setZero();
+        } else {
+            z_ub_masked(3 * i + 2) = force_limits(i);
+        }
+
     }
     
     lb << opt_data_.beq, bineq_lb_, dv_lb_, u_lb_, z_lb_masked;
