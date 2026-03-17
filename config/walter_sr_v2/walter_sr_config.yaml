@@ -45,13 +45,13 @@ weights_config:
   torso_rotational_tracking: 0.0
 
   tls_translational_tracking: 0.0
-  tls_rotational_tracking: 0.0
+  tls_rotational_tracking: 100.0
   trs_translational_tracking: 0.0
-  trs_rotational_tracking: 0.0
+  trs_rotational_tracking: 100.0
   hls_translational_tracking: 0.0
-  hls_rotational_tracking: 0.0
+  hls_rotational_tracking: 100.0
   hrs_translational_tracking: 0.0
-  hrs_rotational_tracking: 0.0
+  hrs_rotational_tracking: 100.0
   
   # tlh_translational_tracking: 5000.0
   # tlh_rotational_tracking: 00.0
