@@ -124,8 +124,8 @@ OSCNode::OSCNode(const std::string& xml_path)
       Abox_(MatrixColMajor<optimization::design_vector_size, optimization::design_vector_size>::Identity()),
       dv_lb_(Vector<optimization::dv_size>::Constant(-infinity_)),
       dv_ub_(Vector<optimization::dv_size>::Constant(infinity_)),
-      u_lb_({-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0}),
-      u_ub_({10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0}),
+      u_lb_({-20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0}),
+      u_ub_({20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0}),
       z_lb_({
           -infinity_, -infinity_, 0.0, -infinity_, -infinity_, 0.0, -infinity_, -infinity_, 0.0, -infinity_, -infinity_, 0.0,
           -infinity_, -infinity_, 0.0, -infinity_, -infinity_, 0.0, -infinity_, -infinity_, 0.0, -infinity_, -infinity_, 0.0}),
@@ -145,7 +145,7 @@ OSCNode::OSCNode(const std::string& xml_path)
     mj_model_->opt.timestep = 0.002;
     mj_data_ = mj_makeData(mj_model_);
 
-    mj_resetDataKeyframe(mj_model_, mj_data_, 5); // 
+    mj_resetDataKeyframe(mj_model_, mj_data_, 6); // 
     mj_forward(mj_model_, mj_data_); // Compute initial kinematics
     
     
@@ -1172,7 +1172,7 @@ void OSCNode::publish_torque_command(bool safety_override_active_local,
         "rear_left_hip", "rear_left_knee", "rear_right_hip", "rear_right_knee",
         "front_left_hip", "front_left_knee", "front_right_hip", "front_right_knee"};
     
-    const double MAX_TORQUE = 10.0;
+    const double MAX_TORQUE = 20.0;
     const int TORQUE_CONTROL_MODE = 1; 
     const int VELOCITY_CONTROL_MODE = 2; 
 
