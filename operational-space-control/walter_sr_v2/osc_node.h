@@ -97,10 +97,12 @@ private:
     // Now takes the state to eliminate reliance on the shared state_ member.
     void update_mj_data(const State& current_state);
     void update_osc_data();
-    void update_optimization_data();
-    absl::Status set_up_optimization(const Vector<model::contact_site_ids_size>& contact_mask);
+    // void update_optimization_data();
+    void update_optimization_data(const Eigen::Vector<double, model::contact_site_ids_size>& force_limits);
+
+    absl::Status set_up_optimization(const Vector<model::contact_site_ids_size>& force_limits);
     // Now takes contact mask data to update bounds
-    absl::Status update_optimization(const Vector<model::contact_site_ids_size>& contact_mask); 
+    absl::Status update_optimization(const Vector<model::contact_site_ids_size>& force_limits); 
     // void solve_optimization();
     bool solve_optimization();
     void reset_optimization();

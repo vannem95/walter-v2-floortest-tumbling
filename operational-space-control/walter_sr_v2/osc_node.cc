@@ -298,11 +298,7 @@ OSCNode::OSCNode(const std::string& xml_path)
     
 
     // Add your metadata note here!
-    data_msg_.layout.dim[0].label = "target_hip_z, hip_z_tl, hip_z_tr, hip_z_hl, hip_z_hr, 
-    target_hip_z_vel, hip_zv_tl, hip_zv_tr, hip_zv_hl, hip_zv_hr, 
-    shin_pos_tl_target, shin_pos_tr_target, shin_pos_hl_target, shin_pos_hr_target, shin_pos_tl, shin_pos_tr, shin_pos_hl, shin_pos_hr, 
-    shin_vel_target, shin_vel_tl, shin_vel_tr, shin_vel_hl, shin_vel_hr, 
-    body_x, body_y, body_z"; 
+    data_msg_.layout.dim[0].label = "target_hip_z, hip_z_tl, hip_z_tr, hip_z_hl, hip_z_hr, target_hip_z_vel, hip_zv_tl, hip_zv_tr, hip_zv_hl, hip_zv_hr, shin_pos_tl_target, shin_pos_tr_target, shin_pos_hl_target, shin_pos_hr_target, shin_pos_tl, shin_pos_tr, shin_pos_hl, shin_pos_hr, shin_vel_target, shin_vel_tl, shin_vel_tr, shin_vel_hl, shin_vel_hr, body_x, body_y, body_z"; 
     
     // Reserve memory so push_back is zero-overhead
     // data_msg_.data.reserve(num_sites * num_dof);        
