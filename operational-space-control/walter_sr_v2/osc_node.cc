@@ -1037,8 +1037,8 @@ void OSCNode::update_optimization_data(const Eigen::Vector<double, model::contac
     auto Aeq_matrix = evaluate_function<AeqParams>(Aeq_ops, {design_vector_.data(), mass_matrix.data(), coriolis_matrix.data(), contact_jacobian.data()});
     auto beq_matrix = evaluate_function<beqParams>(beq_ops, {design_vector_.data(), mass_matrix.data(), coriolis_matrix.data(), contact_jacobian.data()});
     // Updates to integrate the required Casadi Inputs mapping into C++ arrays
-    auto Aineq_matrix = evaluate_function<AineqParams>(Aineq_ops, {design_vector_.data(), force_limits.data()});
-    auto bineq_matrix = evaluate_function<bineqParams>(bineq_ops, {design_vector_.data(), force_limits.data()});
+    auto Aineq_matrix = evaluate_function<AineqParams>(Aineq_ops, {design_vector_.data(), const_cast<double*>(force_limits.data())});
+    auto bineq_matrix = evaluate_function<bineqParams>(bineq_ops, {design_vector_.data(), const_cast<double*>(force_limits.data())});
     auto H_matrix = evaluate_function<HParams>(H_ops, {design_vector_.data(), desired_taskspace_ddx.data(), taskspace_jacobian.data(), taskspace_bias.data()});
     auto f_matrix = evaluate_function<fParams>(f_ops, {design_vector_.data(), desired_taskspace_ddx.data(), taskspace_jacobian.data(), taskspace_bias.data()});
 
