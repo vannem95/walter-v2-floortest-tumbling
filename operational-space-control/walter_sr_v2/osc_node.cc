@@ -298,11 +298,13 @@ OSCNode::OSCNode(const std::string& xml_path)
     
 
     // Add your metadata note here!
-    data_msg_.layout.dim[0].label = "target_hip_z, hip_z_tl, hip_z_tr, hip_z_hl, hip_z_hr, target_hip_z_vel, hip_zv_tl, hip_zv_tr, hip_zv_hl, hip_zv_hr, shin_pos_tl_target, shin_pos_tr_target, shin_pos_hl_target, shin_pos_hr_target, shin_pos_tl, shin_pos_tr, shin_pos_hl, shin_pos_hr, shin_vel_target, shin_vel_tl, shin_vel_tr, shin_vel_hl, shin_vel_hr, body_x, body_y, body_z"; 
+
+    data_msg_.layout.dim[0].label = "target_hip_z, hip_z_tl, hip_z_tr, hip_z_hl, hip_z_hr, target_hip_z_vel, hip_zv_tl, hip_zv_tr, hip_zv_hl, hip_zv_hr, shin_pos_tl_target, shin_pos_tr_target, shin_pos_hl_target, shin_pos_hr_target, shin_pos_tl, shin_pos_tr, shin_pos_hl, shin_pos_hr, shin_vel_target, shin_vel_tl, shin_vel_tr, shin_vel_hl, shin_vel_hr, body_x, body_y, body_z, contact_tlf, contact_tlr, contact_trf, contact_trr, contact_hlf, contact_hlr, contact_hrf, contact_hrr, osqp_exit, time_casadi, time_osqp, qp_obj, tau_rlh, tau_rlk, tau_rrh, tau_rrk, tau_flh, tau_flk, tau_frh, tau_frk, fz_tlf, fz_tlr, fz_trf, fz_trr, fz_hlf, fz_hlr, fz_hrf, fz_hrr"; 
     
-    // Reserve memory so push_back is zero-overhead
-    // data_msg_.data.reserve(num_sites * num_dof);        
-    data_msg_.data.reserve(1);        
+    data_msg_.data.reserve(54); // Exactly 54 elements now    
+    // // Reserve memory so push_back is zero-overhead
+    // // data_msg_.data.reserve(num_sites * num_dof);        
+    // data_msg_.data.reserve(1);        
     //===========================================================================
 
     timer_ = this->create_wall_timer(std::chrono::microseconds(5000), std::bind(&OSCNode::timer_callback, this));
@@ -734,6 +736,34 @@ void OSCNode::timer_callback() {
         data_msg_.data.push_back(mj_data_->qpos[0]); // body_x
         data_msg_.data.push_back(mj_data_->qpos[1]); // body_y
         data_msg_.data.push_back(mj_data_->qpos[2]); // body_z
+        
+        // --- RECORD CONTACT MASK ---
+        // (Indices: 0=TLF, 1=TLR, 2=TRF, 3=TRR, 4=HLF, 5=HLR, 6=HRF, 7=HRR)
+        for (int i = 0; i < 8; ++i) {
+            data_msg_.data.push_back(local_state.contact_mask(i));
+        }        
+        // 3. Publish
+        // --- SOLVER HEALTH ---
+        data_msg_.data.push_back(static_cast<double>(exit_code_));
+        data_msg_.data.push_back(time_casadi_update_ms_);
+        data_msg_.data.push_back(time_osqp_solve_ms_);
+        
+        // Calculate QP Objective (0.5 * x'Hx + f'x)
+        double quadratic_term = 0.5 * solution_.transpose() * opt_data_.H * solution_;
+        double linear_term = opt_data_.f.transpose() * solution_;
+        data_msg_.data.push_back(quadratic_term + linear_term);
+
+        // --- TORQUES ---
+        Vector<model::nu_size> osc_torque = solution_(Eigen::seqN(optimization::dv_idx, optimization::u_size));
+        for (int i = 0; i < model::nu_size; ++i) {
+            data_msg_.data.push_back(osc_torque(i));
+        }
+
+        // --- PREDICTED CONTACT FORCES (Z-Axis Only) ---
+        // Z forces are every 3rd element starting at u_idx + 2
+        for (int i = 0; i < model::contact_site_ids_size; ++i) {
+            data_msg_.data.push_back(solution_(optimization::u_idx + (3 * i) + 2));
+        }
         
         // 3. Publish
         data_pub_->publish(data_msg_);
