@@ -465,57 +465,8 @@ void OSCNode::timer_callback() {
     
 
 
-
-    // ===============================================================
-    // --- 1. TIMED CONTACT MASK OVERRIDE ---
-    // ===============================================================
-    // Unconditionally force the contact mask based purely on elapsed time
-    double flip_period = M_PI / (0.8 * 2.0); 
-    double elapsed_gait_time = current_time - gait_start_time;
-    
-    bool is_even_cycle = ((int)(elapsed_gait_time / flip_period) % 2 == 0);
-
-    if (is_even_cycle) {
-        // Fronts ON, Backs OFF
-        local_state.contact_mask(0) = 1.0; local_state.contact_mask(2) = 1.0; // Torso Front
-        local_state.contact_mask(1) = 0.0; local_state.contact_mask(3) = 0.0; // Torso Back
-        
-        local_state.contact_mask(4) = 1.0; local_state.contact_mask(6) = 1.0; // Head Front
-        local_state.contact_mask(5) = 0.0; local_state.contact_mask(7) = 0.0; // Head Back
-    } else {
-        // Backs ON, Fronts OFF
-        local_state.contact_mask(0) = 0.0; local_state.contact_mask(2) = 0.0;
-        local_state.contact_mask(1) = 1.0; local_state.contact_mask(3) = 1.0;
-        
-        local_state.contact_mask(4) = 0.0; local_state.contact_mask(6) = 0.0;
-        local_state.contact_mask(5) = 1.0; local_state.contact_mask(7) = 1.0;
-    }
-
-
-
-    // ===============================================================
-    // --- 2. CALCULATE SOFT SWITCH FORCE LIMITS ---
-    // ===============================================================
-    Eigen::Vector<double, model::contact_site_ids_size> current_force_limits;
-    for(int i=0; i < model::contact_site_ids_size; ++i) {
-        bool is_contact = (local_state.contact_mask(i) > 0.5);
-        bool was_contact = (prev_contact_mask[i] > 0.5);
-
-        if (is_contact && !was_contact) contact_start_times[i] = current_time;
-
-        double limit = 0.0;
-        if (is_contact) {
-            double duration = current_time - contact_start_times[i];
-            double ratio = std::clamp(duration / soft_switch_ramp_time, 0.0, 1.0);
-            limit = ratio * soft_switch_max_force;
-        }
-        current_force_limits[i] = limit;
-    }
-    prev_contact_mask = local_state.contact_mask;
-
-
-    // --- 2. Mandatory Joint Limit Check (Outer Loop - UNLOCKED) ---
-    // If local_safety_override_active is true, limit_hit remains true, and the check loop is skipped.
+// --- 2. Mandatory Joint Limit Check (Outer Loop - UNLOCKED) ---
+    // (Keep the limit checks here so it can trip the safety flag!)
     bool limit_hit = local_safety_override_active; 
     
     if (!local_safety_override_active) {
@@ -556,54 +507,79 @@ void OSCNode::timer_callback() {
     // --- 3. Conditional OSC Calculation and Solve (UNLOCKED) ---
     if (!local_safety_override_active) {
 
-        // 1. Update Mujoco Data for Kinematics (using local_state)
+        // ===============================================================
+        // --- PHASE-BASED CONTACT MASK OVERRIDE ---
+        // ===============================================================
+        // (Assuming you use the phase-based version we discussed earlier!)
+        double elapsed_t = current_time - gait_start_time;
+        double MAX_SHIN_VEL = 0.0; // Your desired cruising speed
+        double RAMP_TIME = 2.0;    // Seconds to reach top speed
         
+        double shin_vel_target = 0.0;
+        double pos_offset = 0.0;
+
+        if (elapsed_t < RAMP_TIME) {
+            shin_vel_target = MAX_SHIN_VEL * (elapsed_t / RAMP_TIME);
+            pos_offset = 0.5 * (MAX_SHIN_VEL / RAMP_TIME) * (elapsed_t * elapsed_t);
+        } else {
+            shin_vel_target = MAX_SHIN_VEL;
+            double distance_during_ramp = 0.5 * MAX_SHIN_VEL * RAMP_TIME;
+            pos_offset = distance_during_ramp + MAX_SHIN_VEL * (elapsed_t - RAMP_TIME);
+        }
+
+        double shin_pos_tl_target = shin_pos_tl_initial + pos_offset;
+        double shin_pos_tr_target = shin_pos_tr_initial + pos_offset;
+        double shin_pos_hl_target = shin_pos_hl_initial + pos_offset;
+        double shin_pos_hr_target = shin_pos_hr_initial + pos_offset;
+
+        // Calculate phase
+        double current_phase_angle = shin_pos_tl_target - shin_pos_tl_initial;
+        int completed_half_rotations = static_cast<int>(current_phase_angle / M_PI);
+        bool is_even_cycle = (completed_half_rotations % 2 == 0);
+
+        if (is_even_cycle) {
+            local_state.contact_mask(0) = 1.0; local_state.contact_mask(2) = 1.0; 
+            local_state.contact_mask(1) = 0.0; local_state.contact_mask(3) = 0.0; 
+            local_state.contact_mask(4) = 1.0; local_state.contact_mask(6) = 1.0; 
+            local_state.contact_mask(5) = 0.0; local_state.contact_mask(7) = 0.0; 
+        } else {
+            local_state.contact_mask(0) = 0.0; local_state.contact_mask(2) = 0.0;
+            local_state.contact_mask(1) = 1.0; local_state.contact_mask(3) = 1.0;
+            local_state.contact_mask(4) = 0.0; local_state.contact_mask(6) = 0.0;
+            local_state.contact_mask(5) = 1.0; local_state.contact_mask(7) = 1.0;
+        }
+
+        // ===============================================================
+        // --- CALCULATE SOFT SWITCH FORCE LIMITS ---
+        // ===============================================================
+        Eigen::Vector<double, model::contact_site_ids_size> current_force_limits;
+        for(int i=0; i < model::contact_site_ids_size; ++i) {
+            bool is_contact = (local_state.contact_mask(i) > 0.5);
+            bool was_contact = (prev_contact_mask[i] > 0.5);
+
+            if (is_contact && !was_contact) contact_start_times[i] = current_time;
+
+            double limit = 0.0;
+            if (is_contact) {
+                double duration = current_time - contact_start_times[i];
+                double ratio = std::clamp(duration / soft_switch_ramp_time, 0.0, 1.0);
+                limit = ratio * soft_switch_max_force;
+            }
+            current_force_limits[i] = limit;
+        }
+        prev_contact_mask = local_state.contact_mask;
+
+
+        // 1. Update Mujoco Data for Kinematics (using modified local_state)
         // --- TIMING POINT A: START MUJOCO/KINEMATICS ---
         auto t_start_kinematics = std::chrono::high_resolution_clock::now();        
-        
         update_mj_data(local_state); 
-
-        // ===============================================================
-        // joint angle based Z maintenance targets
-        // ===============================================================
-        // 2b. Define Targets and Calculate DDQ Commands
-
-        // Sim - on ground
-        // shin - (kp - 80*100 — kd - 80*10) 200/20, 300/30
-        // double shin_factor = 1.0;
-        // double shin_kp = 400.0*shin_factor; double shin_kv = 20.0*shin_factor;
-
-        // thigh - (kp - 10*100 — kd - 10*10) 200/20
-        // double thigh_factor = 1.0;
-        // double thigh_kp = 400.0*thigh_factor; double thigh_kv = 20.0*thigh_factor;
-
-        // double shin_pos_target = 0.0;
-        // double thigh_pos_target = 0.55; 
-
-        // double rot_vel_target = 0.0; 
         
         // ===============================================================
         // Z control targets
         // ===============================================================
         // thigh - (kp - 600.0 — kd - 45.0)
-        double thigh_z_kp = 1300.0; double thigh_z_kv = 130.0;
-        
-        
-        
-        // --- PROPELLER HEIGHT CALCULATION ---
-        // Eigen::Quaterniond q_body(local_state.body_rotation(0), local_state.body_rotation(1), 
-        //                         local_state.body_rotation(2), local_state.body_rotation(3));
-        
-        // // link lengths
-        // const double L_THIGH = 0.1016;  // hip to knee
-        // const double L_SHIN  = 0.08255; // knee to wheel center
-        // const double R_WHEEL = 0.0635;  // Radius of the wheel
-
-        // // Calculate for each leg
-        // double hip_z_tl = get_propeller_leg_height(q_body, local_state.motor_position(0), local_state.motor_position(1), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
-        // double hip_z_tr = get_propeller_leg_height(q_body, local_state.motor_position(2), local_state.motor_position(3), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
-        // double hip_z_hl = get_propeller_leg_height(q_body, local_state.motor_position(4), local_state.motor_position(5), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
-        // double hip_z_hr = get_propeller_leg_height(q_body, local_state.motor_position(6), local_state.motor_position(7), 0, 0, L_THIGH, L_SHIN, R_WHEEL);
+        double thigh_z_kp = 1300.0; double thigh_z_kv = 72.0;
 
         // Use instantaneous motor velocities to calculate exact Z velocity
         double hip_zv_tl = get_propeller_leg_height_velocity(
@@ -641,14 +617,14 @@ void OSCNode::timer_callback() {
         // ===============================================================
         // SHIN VELOCITY AND POSITION TARGET
         // ===============================================================        
-        double elapsed_t = current_time - gait_start_time;
+        // double elapsed_t = current_time - gait_start_time;
         
-        double shin_vel_target = 0.5;
+        // double shin_vel_target = MAX_SHIN_VEL;
 
-        double shin_pos_tl_target = shin_pos_tl_initial + shin_vel_target*elapsed_t;
-        double shin_pos_tr_target = shin_pos_tr_initial + shin_vel_target*elapsed_t;
-        double shin_pos_hl_target = shin_pos_hl_initial + shin_vel_target*elapsed_t;
-        double shin_pos_hr_target = shin_pos_hr_initial + shin_vel_target*elapsed_t;
+        // double shin_pos_tl_target = shin_pos_tl_initial + shin_vel_target*elapsed_t;
+        // double shin_pos_tr_target = shin_pos_tr_initial + shin_vel_target*elapsed_t;
+        // double shin_pos_hl_target = shin_pos_hl_initial + shin_vel_target*elapsed_t;
+        // double shin_pos_hr_target = shin_pos_hr_initial + shin_vel_target*elapsed_t;
 
         double shin_pos_tl  =  local_state.motor_position(1);
         double shin_pos_tr  =  local_state.motor_position(3);
