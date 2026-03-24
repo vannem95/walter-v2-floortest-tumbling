@@ -512,7 +512,7 @@ void OSCNode::timer_callback() {
         // ===============================================================
         // (Assuming you use the phase-based version we discussed earlier!)
         double elapsed_t = current_time - gait_start_time;
-        double MAX_SHIN_VEL = 0.0; // Your desired cruising speed
+        double MAX_SHIN_VEL = 0.5; // Your desired cruising speed
         double RAMP_TIME = 2.0;    // Seconds to reach top speed
         
         double shin_vel_target = 0.0;
@@ -537,46 +537,46 @@ void OSCNode::timer_callback() {
         int completed_half_rotations = static_cast<int>(current_phase_angle / M_PI);
         bool is_even_cycle = (completed_half_rotations % 2 == 0);
 
-        // if (is_even_cycle) {
-        //     local_state.contact_mask(0) = 1.0; local_state.contact_mask(2) = 1.0; 
-        //     local_state.contact_mask(1) = 0.0; local_state.contact_mask(3) = 0.0; 
-        //     local_state.contact_mask(4) = 1.0; local_state.contact_mask(6) = 1.0; 
-        //     local_state.contact_mask(5) = 0.0; local_state.contact_mask(7) = 0.0; 
-        // } else {
-        //     local_state.contact_mask(0) = 0.0; local_state.contact_mask(2) = 0.0;
-        //     local_state.contact_mask(1) = 1.0; local_state.contact_mask(3) = 1.0;
-        //     local_state.contact_mask(4) = 0.0; local_state.contact_mask(6) = 0.0;
-        //     local_state.contact_mask(5) = 1.0; local_state.contact_mask(7) = 1.0;
-        // }
+        if (is_even_cycle) {
+            local_state.contact_mask(0) = 1.0; local_state.contact_mask(2) = 1.0; 
+            local_state.contact_mask(1) = 0.0; local_state.contact_mask(3) = 0.0; 
+            local_state.contact_mask(4) = 1.0; local_state.contact_mask(6) = 1.0; 
+            local_state.contact_mask(5) = 0.0; local_state.contact_mask(7) = 0.0; 
+        } else {
+            local_state.contact_mask(0) = 0.0; local_state.contact_mask(2) = 0.0;
+            local_state.contact_mask(1) = 1.0; local_state.contact_mask(3) = 1.0;
+            local_state.contact_mask(4) = 0.0; local_state.contact_mask(6) = 0.0;
+            local_state.contact_mask(5) = 1.0; local_state.contact_mask(7) = 1.0;
+        }
 
         // ===============================================================
         // --- STATIC STANDING CONTACT MASK OVERRIDE ---
         // ===============================================================
         // Since we are doing a height task (MAX_SHIN_VEL = 0.0), 
         // force all 8 contact points to be firmly on the ground.
-        for(int i = 0; i < 8; ++i) {
-            local_state.contact_mask(i) = 1.0; 
-        }        
+        // for(int i = 0; i < 8; ++i) {
+        //     local_state.contact_mask(i) = 1.0; 
+        // }        
 
         // ===============================================================
         // --- CALCULATE SOFT SWITCH FORCE LIMITS ---
         // ===============================================================
-        // Eigen::Vector<double, model::contact_site_ids_size> current_force_limits;
-        // for(int i=0; i < model::contact_site_ids_size; ++i) {
-        //     bool is_contact = (local_state.contact_mask(i) > 0.5);
-        //     bool was_contact = (prev_contact_mask[i] > 0.5);
+        Eigen::Vector<double, model::contact_site_ids_size> current_force_limits;
+        for(int i=0; i < model::contact_site_ids_size; ++i) {
+            bool is_contact = (local_state.contact_mask(i) > 0.5);
+            bool was_contact = (prev_contact_mask[i] > 0.5);
 
-        //     if (is_contact && !was_contact) contact_start_times[i] = current_time;
+            if (is_contact && !was_contact) contact_start_times[i] = current_time;
 
-        //     double limit = 0.0;
-        //     if (is_contact) {
-        //         double duration = current_time - contact_start_times[i];
-        //         double ratio = std::clamp(duration / soft_switch_ramp_time, 0.0, 1.0);
-        //         limit = ratio * soft_switch_max_force;
-        //     }
-        //     current_force_limits[i] = limit;
-        // }
-        // prev_contact_mask = local_state.contact_mask;
+            double limit = 0.0;
+            if (is_contact) {
+                double duration = current_time - contact_start_times[i];
+                double ratio = std::clamp(duration / soft_switch_ramp_time, 0.0, 1.0);
+                limit = ratio * soft_switch_max_force;
+            }
+            current_force_limits[i] = limit;
+        }
+        prev_contact_mask = local_state.contact_mask;
 
 
         // ===============================================================
@@ -584,15 +584,15 @@ void OSCNode::timer_callback() {
         // ===============================================================
         // For a static standing test, we bypass the soft-switch ramp 
         // so the solver instantly has the force required to fight gravity.
-        Eigen::Vector<double, model::contact_site_ids_size> current_force_limits;
-        for(int i=0; i < model::contact_site_ids_size; ++i) {
-            if (local_state.contact_mask(i) > 0.5) {
-                current_force_limits[i] = soft_switch_max_force; // Instantly give 770N limit
-            } else {
-                current_force_limits[i] = 0.0;
-            }
-        }
-        prev_contact_mask = local_state.contact_mask; // Keep this updated just in case        
+        // Eigen::Vector<double, model::contact_site_ids_size> current_force_limits;
+        // for(int i=0; i < model::contact_site_ids_size; ++i) {
+        //     if (local_state.contact_mask(i) > 0.5) {
+        //         current_force_limits[i] = soft_switch_max_force; // Instantly give 770N limit
+        //     } else {
+        //         current_force_limits[i] = 0.0;
+        //     }
+        // }
+        // prev_contact_mask = local_state.contact_mask; // Keep this updated just in case        
 
 
         // 1. Update Mujoco Data for Kinematics (using modified local_state)
@@ -662,7 +662,7 @@ void OSCNode::timer_callback() {
         double shin_vel_hr  =  local_state.motor_velocity(7);
 
         double shin_kp = 400.0; 
-        double shin_kv = 20.0;
+        double shin_kv = 40.0;
         // ===============================================================        
 
 
