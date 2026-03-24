@@ -124,8 +124,11 @@ OSCNode::OSCNode(const std::string& xml_path)
       Abox_(MatrixColMajor<optimization::design_vector_size, optimization::design_vector_size>::Identity()),
       dv_lb_(Vector<optimization::dv_size>::Constant(-infinity_)),
       dv_ub_(Vector<optimization::dv_size>::Constant(infinity_)),
-      u_lb_({-20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0}),
-      u_ub_({20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0}),
+    //   u_lb_({-20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0}),
+    //   u_ub_({20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0}),
+      // Hips get 12.0 N.m, Knees get 25.0 N.m
+      u_lb_({-12.0, -25.0, -12.0, -25.0, -12.0, -25.0, -12.0, -25.0}),
+      u_ub_({ 12.0,  25.0,  12.0,  25.0,  12.0,  25.0,  12.0,  25.0}),      
       z_lb_({
           -infinity_, -infinity_, 0.0, -infinity_, -infinity_, 0.0, -infinity_, -infinity_, 0.0, -infinity_, -infinity_, 0.0,
           -infinity_, -infinity_, 0.0, -infinity_, -infinity_, 0.0, -infinity_, -infinity_, 0.0, -infinity_, -infinity_, 0.0}),
@@ -661,8 +664,8 @@ void OSCNode::timer_callback() {
         double shin_vel_hl  =  local_state.motor_velocity(5);
         double shin_vel_hr  =  local_state.motor_velocity(7);
 
-        double shin_kp = 400.0; 
-        double shin_kv = 40.0;
+        double shin_kp = 100.0; 
+        double shin_kv = 20.0;
         // ===============================================================        
 
 
@@ -1200,7 +1203,7 @@ void OSCNode::publish_torque_command(bool safety_override_active_local,
         "rear_left_hip", "rear_left_knee", "rear_right_hip", "rear_right_knee",
         "front_left_hip", "front_left_knee", "front_right_hip", "front_right_knee"};
     
-    const double MAX_TORQUE = 20.0;
+    const double MAX_TORQUE = 25.0;
     const int TORQUE_CONTROL_MODE = 1; 
     const int VELOCITY_CONTROL_MODE = 2; 
 
