@@ -7,6 +7,7 @@
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <filesystem>
 
 #include "rclcpp/rclcpp.hpp"
 #include "osc_2_in_interface/msg/osc_mujoco_state.hpp"
