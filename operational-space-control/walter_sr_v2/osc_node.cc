@@ -9,7 +9,7 @@ const int NUM_MOTORS = 8;
 const int CONTACT_SITES = 8; 
 
 OSCNode::OSCNode(const std::string& xml_path)
-    : Node("osc_node"), xml_path_(xml_path)
+    : Node("osc_node")
 {
     // --- ROS 2 communication setup ---
     state_subscriber_ = this->create_subscription<OSCMujocoState>(
