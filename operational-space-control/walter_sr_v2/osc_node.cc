@@ -144,11 +144,11 @@ void OSCNode::timer_callback() {
         double target_hip_pos = 0.0; // Straight down relative to chassis
         double target_hip_vel = 0.0;
         
-        double hip_kp = 180.0; // Stiff enough to hold the body
-        double hip_kd = 8.0;
+        double hip_kp = 10.0; // Stiff enough to hold the body
+        double hip_kd = 1.0;
         
-        double shin_kp = 120.0; // Aggressive tracking for the spin
-        double shin_kd = 8.0;
+        double shin_kp = 10.0; // Aggressive tracking for the spin
+        double shin_kd = 1.0;
         
         for (int i = 0; i < NUM_MOTORS; ++i) {
             bool is_hip = (i % 2 == 0);
