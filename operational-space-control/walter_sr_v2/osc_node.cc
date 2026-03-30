@@ -145,10 +145,10 @@ void OSCNode::timer_callback() {
         double target_hip_vel = 0.0;
         
         double hip_kp = 100.0; // Stiff enough to hold the body
-        double hip_kd = 5.0;
+        double hip_kd = 10.0;
         
         double shin_kp = 100.0; // Aggressive tracking for the spin
-        double shin_kd = 5.0;
+        double shin_kd = 10.0;
         
         for (int i = 0; i < NUM_MOTORS; ++i) {
             bool is_hip = (i % 2 == 0);
