@@ -180,9 +180,11 @@ void OSCNode::timer_callback() {
         }
 
         // --- Network-Safe PD Gains ---
-        double target_hip_pos = 0.0; 
-        double target_hip_vel = 0.0;
-        
+        // --- Network-Safe PD Gains ---
+        // Dynamically capture the starting hip angle from Keyframe 6
+        static double hip_pos_initial = local_state.motor_position(0); 
+        double target_hip_pos = hip_pos_initial; 
+        double target_hip_vel = 0.0;        
         double hip_kp = 50.0; 
         double hip_kd = 3.0;
         
