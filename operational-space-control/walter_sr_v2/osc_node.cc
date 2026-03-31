@@ -2,7 +2,9 @@
 #include <chrono>
 #include <cmath>
 #include <algorithm>
-#include <filesystem>
+#include <set>      // Needed for reversed_joints_
+#include <array>    // Needed for MOTOR_NAMES
+#include <memory>   // Needed for std::make_unique
 
 using namespace std::chrono_literals;
 
