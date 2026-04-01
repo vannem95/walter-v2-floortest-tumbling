@@ -2,9 +2,6 @@
 #include <chrono>
 #include <cmath>
 #include <algorithm>
-#include <set>      // Needed for reversed_joints_
-#include <array>    // Needed for MOTOR_NAMES
-#include <memory>   // Needed for std::make_unique
 
 using namespace std::chrono_literals;
 
@@ -12,20 +9,8 @@ const int NUM_MOTORS = 8;
 const int CONTACT_SITES = 8; 
 
 OSCNode::OSCNode(const std::string& xml_path)
-    : Node("osc_node"), xml_path_(xml_path) // Re-added xml_path_ initialization
+    : Node("osc_node")
 {
-    // --- Mujoco initialization ---
-    char error[1000];
-    mj_model_ = mj_loadXML(xml_path_.c_str(), nullptr, error, 1000);
-    if (!mj_model_) {
-        RCLCPP_FATAL(this->get_logger(), "Failed to load Mujoco Model: %s", error);
-        throw std::runtime_error("Failed to load Mujoco Model.");
-    }
-    mj_model_->opt.timestep = 0.002;
-    mj_data_ = mj_makeData(mj_model_);
-    mj_resetDataKeyframe(mj_model_, mj_data_, 6); 
-    mj_forward(mj_model_, mj_data_); 
-
     // --- ROS 2 communication setup ---
     state_subscriber_ = this->create_subscription<OSCMujocoState>(
         "/state_estimator/state", 1, std::bind(&OSCNode::state_callback, this, std::placeholders::_1));
@@ -48,12 +33,11 @@ OSCNode::OSCNode(const std::string& xml_path)
         this->stop_robot();
     });
     
-    RCLCPP_INFO(this->get_logger(), "Hybrid PD + Gravity Feedforward Node Initialized.");
+    RCLCPP_INFO(this->get_logger(), "Pure Joint-Space PD Node Initialized. MuJoCo Completely Bypassed.");
 }
 
 OSCNode::~OSCNode() {
-    mj_deleteData(mj_data_);
-    mj_deleteModel(mj_model_);
+    // MuJoCo pointers completely removed. Nothing to clean up.
 }
 
 void OSCNode::state_callback(const OSCMujocoState::SharedPtr msg) {
@@ -72,27 +56,6 @@ void OSCNode::state_callback(const OSCMujocoState::SharedPtr msg) {
     }
     for (size_t i = 0; i < CONTACT_SITES; ++i) state_.contact_mask(i) = static_cast<double>(msg->contact_mask[i]);
     is_state_received_ = true;    
-}
-
-void OSCNode::update_mj_data(const State& current_state) {
-    // Map Body Orientation (IMU)
-    mj_data_->qpos[3] = current_state.body_rotation(0); 
-    mj_data_->qpos[4] = current_state.body_rotation(1); 
-    mj_data_->qpos[5] = current_state.body_rotation(2); 
-    mj_data_->qpos[6] = current_state.body_rotation(3); 
-    if (current_state.body_rotation.norm() < 1e-6) mj_data_->qpos[3] = 1.0; 
-
-    // Map Motor Positions (starts at index 7 for floating base)
-    for (int i = 0; i < NUM_MOTORS; ++i) mj_data_->qpos[7 + i] = current_state.motor_position(i);
-
-    // Map Velocities
-    for (int i = 0; i < 3; ++i) mj_data_->qvel[i] = current_state.linear_body_velocity(i);
-    for (int i = 0; i < 3; ++i) mj_data_->qvel[3 + i] = current_state.angular_body_velocity(i);
-    for (int i = 0; i < NUM_MOTORS; ++i) mj_data_->qvel[6 + i] = current_state.motor_velocity(i);
-
-    // Run Kinematics to populate qfrc_bias (Gravity/Coriolis forces)
-    mj_fwdPosition(mj_model_, mj_data_);
-    mj_fwdVelocity(mj_model_, mj_data_); 
 }
 
 void OSCNode::timer_callback() {
@@ -130,7 +93,7 @@ void OSCNode::timer_callback() {
         shin_pos_2_initial  = local_state.motor_position(5);
         shin_pos_3_initial  = local_state.motor_position(7);
 
-        RCLCPP_INFO(this->get_logger(), "Starting Hybrid PD + Gravity Tumbling Trajectory...");
+        RCLCPP_INFO(this->get_logger(), "Starting Pure PD Tumbling Trajectory...");
         last_time_ = current_time;
         return; 
     }
@@ -138,7 +101,7 @@ void OSCNode::timer_callback() {
     // --- SAFETY LIMITS ---
     bool limit_hit = local_safety_override_active; 
     if (!local_safety_override_active) {
-        const double HIP_MIN_RAD = -0.8; 
+        const double HIP_MIN_RAD = -0.8; // Expanded safely to allow deep robot tucks
         const double HIP_MAX_RAD = 1.8;
         
         for (size_t i : {0, 2, 4, 6}) { // Hips only
@@ -160,17 +123,12 @@ void OSCNode::timer_callback() {
     double shin_vel_target = 0.0;
     double pos_offset = 0.0;
 
-    // --- HYBRID PD + GRAVITY CONTROLLER ---
+    // --- PURE JOINT SPACE PD CONTROLLER ---
     if (!local_safety_override_active) {
         
-        auto t_start_kinematics = std::chrono::high_resolution_clock::now();        
-        
-        // 1. Update MuJoCo to extract Gravity/Coriolis forces
-        update_mj_data(local_state); 
-
-        // 2. Trajectory Generation
+        // Trajectory Generation
         double elapsed_t = current_time - gait_start_time;
-        double MAX_SHIN_VEL = 0.8; // Flipping speed
+        double MAX_SHIN_VEL = 0.1; // Flipping speed
         double RAMP_TIME = 1.0;    
 
         if (elapsed_t < RAMP_TIME) {
@@ -182,41 +140,31 @@ void OSCNode::timer_callback() {
             pos_offset = distance_during_ramp + MAX_SHIN_VEL * (elapsed_t - RAMP_TIME);
         }
 
-        // --- Network-Safe PD Gains ---
-        // --- Network-Safe PD Gains ---
-        // Dynamically capture the starting hip angle from Keyframe 6
-        static double hip_pos_initial = local_state.motor_position(0); 
-        double target_hip_pos = hip_pos_initial; 
-        double target_hip_vel = 0.0;        
-        double hip_kp = 50.0; 
-        double hip_kd = 3.0;
+        // --- PD Gains ---
+        double target_hip_pos = 0.0; // Straight down relative to chassis
+        double target_hip_vel = 0.0;
         
-        double shin_kp = 50.0; 
-        double shin_kd = 3.0;
+        double hip_kp = 10.0; // Stiff enough to hold the body
+        double hip_kd = 1.0;
+        
+        double shin_kp = 10.0; // Aggressive tracking for the spin
+        double shin_kd = 1.0;
         
         for (int i = 0; i < NUM_MOTORS; ++i) {
             bool is_hip = (i % 2 == 0);
             double current_pos = local_state.motor_position(i);
             double current_vel = local_state.motor_velocity(i);
             
-            // MuJoCo forces for floating base start at index 6 
-            // We SUBTRACT passive forces (damping) from the bias so we don't fight them.
-            double gravity_comp = mj_data_->qfrc_bias[6 + i] - mj_data_->qfrc_passive[6 + i]; 
-            
             if (is_hip) {
-                // Torque = Gravity + PD Error
-                commanded_torques[i] = gravity_comp + hip_kp * (target_hip_pos - current_pos) + hip_kd * (target_hip_vel - current_vel);
+                // Hip Control: Hold 0.0
+                commanded_torques[i] = hip_kp * (target_hip_pos - current_pos) + hip_kd * (target_hip_vel - current_vel);
             } else {
+                // Shin Control: Sweep backwards
                 double initial_shin = (i==1) ? shin_pos_0_initial : (i==3) ? shin_pos_1_initial : (i==5) ? shin_pos_2_initial : shin_pos_3_initial;
                 double target_shin_pos = initial_shin + pos_offset;
-                
-                // Torque = Gravity + PD Error
-                commanded_torques[i] = gravity_comp + shin_kp * (target_shin_pos - current_pos) + shin_kd * (shin_vel_target - current_vel);
+                commanded_torques[i] = shin_kp * (target_shin_pos - current_pos) + shin_kd * (shin_vel_target - current_vel);
             }
         }
-
-        auto t_end_solve = std::chrono::high_resolution_clock::now();
-        time_mujoco_update_ms_ = std::chrono::duration<double, std::milli>(t_end_solve - t_start_kinematics).count();
 
         // ==============================================================================
         // --- TELEMETRY DUMP (Strictly padded to 54 elements for MATLAB) ---
@@ -247,10 +195,10 @@ void OSCNode::timer_callback() {
         data_msg_.data.push_back(local_state.motor_velocity(5));
         data_msg_.data.push_back(local_state.motor_velocity(7));
 
-        // [23-25] Body X, Y, Z (Available since MuJoCo is back!)
-        data_msg_.data.push_back(mj_data_->qpos[0]); 
-        data_msg_.data.push_back(mj_data_->qpos[1]); 
-        data_msg_.data.push_back(mj_data_->qpos[2]); 
+        // [23-25] Body X, Y, Z (Unused without MuJoCo)
+        data_msg_.data.push_back(0.0); 
+        data_msg_.data.push_back(0.0); 
+        data_msg_.data.push_back(0.0); 
         
         // [26-33] Contact Mask (8 elements)
         for (int i = 0; i < 8; ++i) data_msg_.data.push_back(local_state.contact_mask(i));
