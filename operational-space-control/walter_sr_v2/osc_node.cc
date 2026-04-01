@@ -515,7 +515,7 @@ void OSCNode::timer_callback() {
         // ===============================================================
         // (Assuming you use the phase-based version we discussed earlier!)
         double elapsed_t = current_time - gait_start_time;
-        double MAX_SHIN_VEL = 0.5; // Your desired cruising speed
+        double MAX_SHIN_VEL = 0.1; // Your desired cruising speed
         double RAMP_TIME = 2.0;    // Seconds to reach top speed
         
         double shin_vel_target = 0.0;
@@ -665,8 +665,8 @@ void OSCNode::timer_callback() {
         double shin_vel_hl  =  local_state.motor_velocity(5);
         double shin_vel_hr  =  local_state.motor_velocity(7);
 
-        double shin_kp = 100.0; 
-        double shin_kv = 20.0;
+        double shin_kp = 20.0; 
+        double shin_kv = 1.0;
         // ===============================================================        
 
 
