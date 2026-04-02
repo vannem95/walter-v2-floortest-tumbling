@@ -608,7 +608,8 @@ void OSCNode::timer_callback() {
         // ===============================================================
         // thigh - (kp - 600.0 — kd - 45.0)
         // double thigh_z_kp = 1300.0; double thigh_z_kv = 72.0;
-        double thigh_z_kp = 1150.0; double thigh_z_kv = 68.0;
+        // double thigh_z_kp = 1150.0; double thigh_z_kv = 68.0;
+        double thigh_z_kp = 3000.0; double thigh_z_kv = 120.0;
 
         // Use instantaneous motor velocities to calculate exact Z velocity
         double hip_zv_tl = get_propeller_leg_height_velocity(
