@@ -557,29 +557,29 @@ void OSCNode::timer_callback() {
         // ===============================================================
         // Since we are doing a height task (MAX_SHIN_VEL = 0.0), 
         // force all 8 contact points to be firmly on the ground.
-        // for(int i = 0; i < 8; ++i) {
-        //     local_state.contact_mask(i) = 1.0; 
-        // }        
+        for(int i = 0; i < 8; ++i) {
+            local_state.contact_mask(i) = 1.0; 
+        }        
 
         // ===============================================================
         // --- CALCULATE SOFT SWITCH FORCE LIMITS ---
         // ===============================================================
-        Eigen::Vector<double, model::contact_site_ids_size> current_force_limits;
-        for(int i=0; i < model::contact_site_ids_size; ++i) {
-            bool is_contact = (local_state.contact_mask(i) > 0.5);
-            bool was_contact = (prev_contact_mask[i] > 0.5);
+        // Eigen::Vector<double, model::contact_site_ids_size> current_force_limits;
+        // for(int i=0; i < model::contact_site_ids_size; ++i) {
+        //     bool is_contact = (local_state.contact_mask(i) > 0.5);
+        //     bool was_contact = (prev_contact_mask[i] > 0.5);
 
-            if (is_contact && !was_contact) contact_start_times[i] = current_time;
+        //     if (is_contact && !was_contact) contact_start_times[i] = current_time;
 
-            double limit = 0.0;
-            if (is_contact) {
-                double duration = current_time - contact_start_times[i];
-                double ratio = std::clamp(duration / soft_switch_ramp_time, 0.0, 1.0);
-                limit = ratio * soft_switch_max_force;
-            }
-            current_force_limits[i] = limit;
-        }
-        prev_contact_mask = local_state.contact_mask;
+        //     double limit = 0.0;
+        //     if (is_contact) {
+        //         double duration = current_time - contact_start_times[i];
+        //         double ratio = std::clamp(duration / soft_switch_ramp_time, 0.0, 1.0);
+        //         limit = ratio * soft_switch_max_force;
+        //     }
+        //     current_force_limits[i] = limit;
+        // }
+        // prev_contact_mask = local_state.contact_mask;
 
 
         // ===============================================================
@@ -587,15 +587,15 @@ void OSCNode::timer_callback() {
         // ===============================================================
         // For a static standing test, we bypass the soft-switch ramp 
         // so the solver instantly has the force required to fight gravity.
-        // Eigen::Vector<double, model::contact_site_ids_size> current_force_limits;
-        // for(int i=0; i < model::contact_site_ids_size; ++i) {
-        //     if (local_state.contact_mask(i) > 0.5) {
-        //         current_force_limits[i] = soft_switch_max_force; // Instantly give 770N limit
-        //     } else {
-        //         current_force_limits[i] = 0.0;
-        //     }
-        // }
-        // prev_contact_mask = local_state.contact_mask; // Keep this updated just in case        
+        Eigen::Vector<double, model::contact_site_ids_size> current_force_limits;
+        for(int i=0; i < model::contact_site_ids_size; ++i) {
+            if (local_state.contact_mask(i) > 0.5) {
+                current_force_limits[i] = soft_switch_max_force; // Instantly give 770N limit
+            } else {
+                current_force_limits[i] = 0.0;
+            }
+        }
+        prev_contact_mask = local_state.contact_mask; // Keep this updated just in case        
 
 
         // 1. Update Mujoco Data for Kinematics (using modified local_state)
