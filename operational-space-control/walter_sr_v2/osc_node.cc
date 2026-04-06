@@ -476,7 +476,7 @@ void OSCNode::timer_callback() {
         
         const double HIP_MIN_RAD = 0.6;
         const double HIP_MAX_RAD = 1.8;
-        const double MIN_HIP_HEIGHT = 0.125; // 0.13 meters
+        const double MIN_HIP_HEIGHT = 0.11; // 0.13 meters
         
         // 1. Check Hip Heights
         if (hip_z_tl < MIN_HIP_HEIGHT || hip_z_tr < MIN_HIP_HEIGHT || 
