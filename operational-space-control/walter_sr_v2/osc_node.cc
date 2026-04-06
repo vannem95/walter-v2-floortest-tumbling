@@ -515,7 +515,7 @@ void OSCNode::timer_callback() {
         // ===============================================================
         // (Assuming you use the phase-based version we discussed earlier!)
         double elapsed_t = current_time - gait_start_time;
-        double MAX_SHIN_VEL = 0.05; // Your desired cruising speed
+        double MAX_SHIN_VEL = 0.01; // Your desired cruising speed
         double RAMP_TIME = 2.0;    // Seconds to reach top speed
         
         double shin_vel_target = 0.0;
@@ -608,8 +608,8 @@ void OSCNode::timer_callback() {
         // ===============================================================
         // thigh - (kp - 600.0 — kd - 45.0)
         // double thigh_z_kp = 1300.0; double thigh_z_kv = 72.0;
-        // double thigh_z_kp = 1150.0; double thigh_z_kv = 68.0;
-        double thigh_z_kp = 2200.0; double thigh_z_kv = 90.0;
+        double thigh_z_kp = 1150.0; double thigh_z_kv = 68.0;
+        // double thigh_z_kp = 2200.0; double thigh_z_kv = 90.0;
 
         // Use instantaneous motor velocities to calculate exact Z velocity
         double hip_zv_tl = get_propeller_leg_height_velocity(
@@ -666,8 +666,8 @@ void OSCNode::timer_callback() {
         double shin_vel_hl  =  local_state.motor_velocity(5);
         double shin_vel_hr  =  local_state.motor_velocity(7);
 
-        double shin_kp = 20.0; 
-        double shin_kv = 1.0;
+        double shin_kp = 100.0; 
+        double shin_kv = 5.0;
         // ===============================================================        
 
 
@@ -965,7 +965,7 @@ void OSCNode::update_mj_data(const State& current_state) {
     // D. Apply calculated Body Position
     mj_data_->qpos[0] = real_body_x;
     mj_data_->qpos[1] = real_body_y;
-    mj_data_->qpos[2] = real_body_z;
+    mj_data_->qpos[2] = real_body_z+0.06;
 
     // =========================================================================
     // PART 3: PREPARE VELOCITY (QVEL) - CRITICAL!
