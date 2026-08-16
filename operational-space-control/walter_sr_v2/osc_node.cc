@@ -240,7 +240,7 @@ void OSCNode::publish_torque_command(bool safety_override_active_local,
         "rear_left_hip", "rear_left_knee", "rear_right_hip", "rear_right_knee",
         "front_left_hip", "front_left_knee", "front_right_hip", "front_right_knee"};
     
-    const double MAX_TORQUE = 25.0; // Safe Joint Limit
+    const double MAX_TORQUE = 4.0; // Safe Joint Limit
     
     auto command_msg = std::make_unique<Command>(); 
     command_msg->master_gain = 1.0; 
