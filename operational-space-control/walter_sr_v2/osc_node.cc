@@ -128,8 +128,8 @@ void OSCNode::timer_callback() {
         
         // Trajectory Generation
         double elapsed_t = current_time - gait_start_time;
-        double MAX_SHIN_VEL = 0.1; // Flipping speed
-        double RAMP_TIME = 1.0;    
+        double MAX_SHIN_VEL = 1.0; // Flipping speed
+        double RAMP_TIME = 0.5;    
 
         if (elapsed_t < RAMP_TIME) {
             shin_vel_target = MAX_SHIN_VEL * (elapsed_t / RAMP_TIME);
@@ -144,11 +144,11 @@ void OSCNode::timer_callback() {
         double target_hip_pos = 0.0; // Straight down relative to chassis
         double target_hip_vel = 0.0;
         
-        double hip_kp = 10.0; // Stiff enough to hold the body
-        double hip_kd = 1.0;
+        double hip_kp = 30.0; // Stiff enough to hold the body
+        double hip_kd = 2.0;
         
-        double shin_kp = 10.0; // Aggressive tracking for the spin
-        double shin_kd = 1.0;
+        double shin_kp = 30.0; // Aggressive tracking for the spin
+        double shin_kd = 2.0;
         
         for (int i = 0; i < NUM_MOTORS; ++i) {
             bool is_hip = (i % 2 == 0);
@@ -240,7 +240,6 @@ void OSCNode::publish_torque_command(bool safety_override_active_local,
         "rear_left_hip", "rear_left_knee", "rear_right_hip", "rear_right_knee",
         "front_left_hip", "front_left_knee", "front_right_hip", "front_right_knee"};
     
-    const double MAX_TORQUE = 8.0; // Safe Joint Limit
     
     auto command_msg = std::make_unique<Command>(); 
     command_msg->master_gain = 1.0; 
@@ -277,6 +276,11 @@ void OSCNode::publish_torque_command(bool safety_override_active_local,
             if (reversed_joints_.count(MOTOR_NAMES[i])) final_torque *= -1.0;
             
             // Hard clamp before network sending
+
+            bool is_hip = (i % 2 == 0);            
+            double MAX_TORQUE = is_hip ? 11.9 : 23.8;
+
+
             final_torque = std::clamp(final_torque, -MAX_TORQUE, MAX_TORQUE);
 
             command_msg->motor_commands[i].name = MOTOR_NAMES[i];
