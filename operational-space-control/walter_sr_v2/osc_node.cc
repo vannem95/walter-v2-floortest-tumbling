@@ -278,7 +278,7 @@ void OSCNode::publish_torque_command(bool safety_override_active_local,
             // Hard clamp before network sending
 
             bool is_hip = (i % 2 == 0);            
-            double MAX_TORQUE = is_hip ? 11.9 : 23.8;
+            double MAX_TORQUE = is_hip ? 8.0 : 16.0;
 
 
             final_torque = std::clamp(final_torque, -MAX_TORQUE, MAX_TORQUE);
